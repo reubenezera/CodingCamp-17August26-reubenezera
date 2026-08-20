@@ -1,0 +1,419 @@
+/* ============================================================
+   Expense & Budget Visualizer — styles.css
+   ============================================================ */
+
+/* ----------------------------------------------------------
+   1. Reset & Base
+   ---------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+  background-color: #f4f6f9;
+  color: #2d3748;
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+/* ----------------------------------------------------------
+   2. Utility
+   ---------------------------------------------------------- */
+
+.hidden {
+  display: none !important;
+}
+
+/* ----------------------------------------------------------
+   3. Header & Balance Display
+   ---------------------------------------------------------- */
+
+header {
+  background-color: #2b6cb0;
+  color: #fff;
+  padding: 1.25rem 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+header h1 {
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+#balance-display {
+  background-color: #1a4f8a;
+  color: #fff;
+  padding: 0.5rem 1.25rem;
+  border-radius: 2rem;
+  font-size: 1rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ----------------------------------------------------------
+   4. App Grid — Responsive two-column / single-column layout
+   ---------------------------------------------------------- */
+
+.app-grid {
+  display: grid;
+  gap: 1.5rem;
+  padding: 1.5rem 2rem;
+  max-width: 1280px;
+  margin: 0 auto;
+  /* Default (mobile-first): single column */
+  grid-template-columns: 1fr;
+}
+
+/* Two-column layout at 768 px and wider (Req 6.2) */
+@media (min-width: 768px) {
+  .app-grid {
+    /* Each column gets at least 30% of viewport width (Req 6.2) */
+    grid-template-columns: minmax(30vw, 1fr) minmax(30vw, 1fr);
+  }
+}
+
+/* Single-column stacked layout below 768 px (Req 6.3) */
+@media (max-width: 767px) {
+  .app-grid {
+    grid-template-columns: 1fr;
+    padding: 1rem;
+  }
+
+  .form-section,
+  .list-section {
+    width: 100%;
+  }
+}
+
+/* ----------------------------------------------------------
+   5. Section Cards (shared)
+   ---------------------------------------------------------- */
+
+.form-section,
+.list-section {
+  background: #fff;
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.form-section h2,
+.list-section h2,
+.chart-section h2 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #2b6cb0;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+/* ----------------------------------------------------------
+   6. Input Form — Field Groups, Labels, Inputs, Select
+   ---------------------------------------------------------- */
+
+#expense-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.field-group label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #4a5568;
+}
+
+.field-group input[type="text"],
+.field-group input[type="number"],
+.field-group select {
+  width: 100%;
+  padding: 0.55rem 0.8rem;
+  border: 1.5px solid #cbd5e0;
+  border-radius: 0.4rem;
+  font-size: 0.95rem;
+  color: #2d3748;
+  background-color: #fff;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  appearance: auto; /* keep native select arrow */
+}
+
+.field-group input[type="text"]:focus,
+.field-group input[type="number"]:focus,
+.field-group select:focus {
+  outline: none;
+  border-color: #4299e1;
+  box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.25);
+}
+
+/* Error state border */
+.field-group input.invalid,
+.field-group select.invalid {
+  border-color: #e53e3e;
+}
+
+/* ----------------------------------------------------------
+   7. Inline Field Error Messages
+   ---------------------------------------------------------- */
+
+.field-error {
+  font-size: 0.78rem;
+  color: #e53e3e;
+  min-height: 1em; /* reserve space so layout doesn't jump */
+  display: block;
+}
+
+/* ----------------------------------------------------------
+   8. Submit Button
+   ---------------------------------------------------------- */
+
+#expense-form button[type="submit"] {
+  padding: 0.65rem 1.25rem;
+  background-color: #2b6cb0;
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 0.4rem;
+  cursor: pointer;
+  transition: background-color 0.15s ease, transform 0.1s ease;
+  align-self: flex-start;
+  width: 100%;
+}
+
+#expense-form button[type="submit"]:hover {
+  background-color: #2c5282;
+}
+
+#expense-form button[type="submit"]:active {
+  background-color: #1a365d;
+  transform: scale(0.98);
+}
+
+/* ----------------------------------------------------------
+   9. Storage Error Banner (form-level)
+   ---------------------------------------------------------- */
+
+.storage-error {
+  margin-top: 0.5rem;
+  padding: 0.6rem 0.9rem;
+  background-color: #fff5f5;
+  border: 1px solid #fed7d7;
+  border-radius: 0.4rem;
+  color: #c53030;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+/* ----------------------------------------------------------
+   10. Transaction List
+   ---------------------------------------------------------- */
+
+#transaction-list {
+  /* Req 2.2: scrollable when content exceeds container height */
+  overflow-y: auto;
+  max-height: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+/* Empty-state / error message inside the list */
+.list-placeholder,
+.list-error {
+  padding: 1.5rem 1rem;
+  text-align: center;
+  color: #718096;
+  font-size: 0.9rem;
+  font-style: italic;
+}
+
+.list-error {
+  color: #c53030;
+  font-style: normal;
+}
+
+/* Individual transaction entry row */
+.transaction-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 0.9rem;
+  background-color: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  transition: background-color 0.1s ease;
+}
+
+.transaction-item:hover {
+  background-color: #ebf8ff;
+}
+
+/* Transaction info block (name + category) */
+.transaction-info {
+  flex: 1;
+  min-width: 0; /* allow text truncation inside flex */
+}
+
+.transaction-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  display: block;
+}
+
+.transaction-category {
+  font-size: 0.75rem;
+  color: #718096;
+  margin-top: 0.1rem;
+}
+
+/* Amount */
+.transaction-amount {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #2b6cb0;
+  white-space: nowrap;
+}
+
+/* Delete control */
+.delete-btn {
+  background: none;
+  border: 1.5px solid #e53e3e;
+  color: #e53e3e;
+  border-radius: 0.35rem;
+  padding: 0.25rem 0.55rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.12s ease, color 0.12s ease;
+  flex-shrink: 0;
+}
+
+.delete-btn:hover {
+  background-color: #e53e3e;
+  color: #fff;
+}
+
+/* Inline delete-error inside the list area */
+.delete-error {
+  padding: 0.5rem 0.75rem;
+  background-color: #fff5f5;
+  border: 1px solid #fed7d7;
+  border-radius: 0.4rem;
+  color: #c53030;
+  font-size: 0.82rem;
+}
+
+/* ----------------------------------------------------------
+   11. Chart Section
+   ---------------------------------------------------------- */
+
+.chart-section {
+  max-width: 1280px;
+  margin: 0 auto 2rem;
+  padding: 0 2rem;
+}
+
+.chart-section > h2 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #2b6cb0;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+#chart-container {
+  background: #fff;
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+}
+
+/* Canvas: constrain size so chart doesn't overflow (Req 4.1) */
+#expense-chart {
+  max-width: 420px;
+  max-height: 420px;
+  width: 100% !important;
+  height: auto !important;
+}
+
+/* Chart empty-state placeholder (Req 4.5, 4.7) */
+#chart-placeholder {
+  color: #718096;
+  font-size: 0.95rem;
+  font-style: italic;
+  text-align: center;
+  padding: 2rem 1rem;
+}
+
+/* ----------------------------------------------------------
+   12. Scrollbar Styling (webkit — cosmetic, non-critical)
+   ---------------------------------------------------------- */
+
+#transaction-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+#transaction-list::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 3px;
+}
+
+#transaction-list::-webkit-scrollbar-thumb {
+  background-color: #a0aec0;
+  border-radius: 3px;
+}
+
+/* ----------------------------------------------------------
+   13. Responsive: chart section padding on mobile
+   ---------------------------------------------------------- */
+
+@media (max-width: 767px) {
+  .chart-section {
+    padding: 0 1rem;
+  }
+
+  header {
+    padding: 1rem;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  #balance-display {
+    align-self: flex-start;
+  }
+}
