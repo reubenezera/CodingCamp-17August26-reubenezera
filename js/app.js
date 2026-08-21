@@ -2,62 +2,123 @@
 // CONFIG
 // ============================================================
 
-const STORAGE_KEY = 'expense_transactions';
-const CATEGORIES = ['Food', 'Transport', 'Fun'];
-const CATEGORY_COLORS = {
+const STORAGE_KEY          = 'expense_transactions';
+const CATEGORIES_KEY       = 'expense_categories';
+const THEME_KEY            = 'expense_theme';
+const CURRENCY_SYMBOL      = 'Rp';
+const MAX_AMOUNT           = 999999999.99;
+const MAX_NAME_LENGTH      = 100;
+const DISPLAY_NAME_LIMIT   = 50;
+
+// Default categories (used when no custom ones are stored yet)
+const DEFAULT_CATEGORIES = ['Food', 'Transport', 'Fun'];
+
+// Default chart colors for the built-in categories
+const DEFAULT_CATEGORY_COLORS = {
   Food:      '#FF6384',
   Transport: '#36A2EB',
   Fun:       '#FFCE56'
 };
-const CURRENCY_SYMBOL = '$';
-const MAX_AMOUNT = 999999999.99;
-const MAX_NAME_LENGTH = 100;
-const DISPLAY_NAME_LIMIT = 50;
+
+// Palette for dynamically assigned colors (cycles if more categories added)
+const COLOR_PALETTE = [
+  '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0',
+  '#9966FF', '#FF9F40', '#C9CBCF', '#7BC8A4',
+  '#E74C3C', '#2ECC71', '#3498DB', '#F39C12'
+];
 
 // ============================================================
 // STATE
 // ============================================================
 
-let transactions = [];
-let chartInstance = null;
-let loadError = false;
+let transactions   = [];
+let categories     = [];        // mutable, loaded from storage
+let categoryColors = {};        // category name → hex color
+let chartInstance  = null;
+let loadError      = false;
+
+function applyTheme(theme) {
+  const isDark = theme === 'dark';
+  document.documentElement.dataset.theme = isDark ? 'dark' : 'light';
+
+  const toggle = document.getElementById('theme-toggle');
+  if (toggle) {
+    toggle.setAttribute('aria-pressed', String(isDark));
+    toggle.setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode');
+    toggle.innerHTML = `<span aria-hidden="true">${isDark ? '☀' : '◐'}</span> ${isDark ? 'Light mode' : 'Dark mode'}`;
+  }
+
+  if (chartInstance) {
+    chartInstance.options.plugins.legend.labels.color = getComputedStyle(document.documentElement)
+      .getPropertyValue('--text').trim();
+    chartInstance.update();
+  }
+}
+
+function handleThemeToggle() {
+  const nextTheme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  localStorage.setItem(THEME_KEY, nextTheme);
+  applyTheme(nextTheme);
+}
+
+// ============================================================
+// CATEGORY HELPERS
+// ============================================================
+
+/**
+ * Assigns a color to every category, reusing existing assignments
+ * and allocating new palette slots for new ones.
+ */
+function rebuildCategoryColors() {
+  const existing = { ...categoryColors };
+  categoryColors = {};
+  categories.forEach((cat, idx) => {
+    categoryColors[cat] = existing[cat] || COLOR_PALETTE[idx % COLOR_PALETTE.length];
+  });
+}
+
+/**
+ * Loads categories from localStorage. Falls back to DEFAULT_CATEGORIES.
+ * @returns {string[]}
+ */
+function loadCategoriesFromStorage() {
+  const raw = localStorage.getItem(CATEGORIES_KEY);
+  if (raw === null) return [...DEFAULT_CATEGORIES];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+  } catch (e) { /* fall through */ }
+  return [...DEFAULT_CATEGORIES];
+}
+
+/**
+ * Persists the current categories array to localStorage.
+ */
+function saveCategoriesToStorage() {
+  localStorage.setItem(CATEGORIES_KEY, JSON.stringify(categories));
+}
 
 // ============================================================
 // VALIDATOR
 // ============================================================
 
-/**
- * Validates the item name field.
- * @param {string} value
- * @returns {string|null} Error message, or null if valid.
- */
 function validateName(value) {
   if (!value || value.trim().length === 0) return 'Item name is required.';
   if (value.trim().length > MAX_NAME_LENGTH) return 'Item name must be 100 characters or fewer.';
   return null;
 }
 
-/**
- * Validates the amount field.
- * @param {string} value
- * @returns {string|null} Error message, or null if valid.
- */
 function validateAmount(value) {
   if (value === '' || value === null || value === undefined) return 'Amount is required.';
   const num = parseFloat(value);
   if (isNaN(num)) return 'Amount must be a number.';
-  if (num <= 0) return 'Amount must be greater than zero.';
+  if (num <= 0)   return 'Amount must be greater than zero.';
   if (num > MAX_AMOUNT) return 'Amount must not exceed 999,999,999.99.';
   return null;
 }
 
-/**
- * Validates the category field.
- * @param {string} value
- * @returns {string|null} Error message, or null if valid.
- */
 function validateCategory(value) {
-  if (!value || !CATEGORIES.includes(value)) return 'Please select a category.';
+  if (!value || !categories.includes(value)) return 'Please select a category.';
   return null;
 }
 
@@ -65,54 +126,25 @@ function validateCategory(value) {
 // STORAGE MANAGER
 // ============================================================
 
-/**
- * Checks whether a value is a valid Transaction object.
- * @param {*} item
- * @returns {boolean}
- */
 function isValidTransaction(item) {
   return (
     item !== null &&
     typeof item === 'object' &&
-    typeof item.id === 'string' &&
-    typeof item.name === 'string' &&
-    typeof item.amount === 'number' &&
-    typeof item.category === 'string' &&
+    typeof item.id        === 'string' &&
+    typeof item.name      === 'string' &&
+    typeof item.amount    === 'number' &&
+    typeof item.category  === 'string' &&
     typeof item.createdAt === 'number'
   );
 }
 
-/**
- * Reads and deserializes transactions from localStorage.
- * - Returns [] if the key is absent.
- * - Returns [] (and sets loadError = true) if JSON is invalid or value is not an array.
- * - Filters out any items missing required Transaction fields.
- * @returns {Transaction[]}
- */
 function loadFromStorage() {
   loadError = false;
-
   const raw = localStorage.getItem(STORAGE_KEY);
-
-  // Key absent — fresh state, no error
-  if (raw === null) {
-    return [];
-  }
-
+  if (raw === null) return [];
   let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (e) {
-    loadError = true;
-    return [];
-  }
-
-  if (!Array.isArray(parsed)) {
-    loadError = true;
-    return [];
-  }
-
-  // Filter out any items that don't conform to the Transaction schema
+  try { parsed = JSON.parse(raw); } catch (e) { loadError = true; return []; }
+  if (!Array.isArray(parsed)) { loadError = true; return []; }
   return parsed.filter(isValidTransaction);
 }
 
@@ -123,11 +155,6 @@ class StorageError extends Error {
   }
 }
 
-/**
- * Serializes the transactions array and writes to localStorage.
- * @param {Transaction[]} transactions
- * @throws {StorageError} if localStorage.setItem fails
- */
 function saveToStorage(transactions) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(transactions));
@@ -136,32 +163,15 @@ function saveToStorage(transactions) {
   }
 }
 
-/**
- * Removes the transaction with the given id from storage.
- * Filters the transactions array to exclude the matching id,
- * then persists the result via saveToStorage().
- * Re-throws StorageError so the event handler can retain the
- * transaction in-memory and display an appropriate error.
- *
- * @param {string} id - The id of the transaction to remove
- * @param {Transaction[]} transactions - The current transactions array
- */
 function removeFromStorage(id, transactions) {
   const updated = transactions.filter(t => t.id !== id);
   saveToStorage(updated);
 }
 
 // ============================================================
-// RENDERER
+// RENDERER — Balance
 // ============================================================
 
-/**
- * Renders the total balance into #balance-display.
- * Sums all transaction amounts, formats to 2 decimal places.
- * - Zero/positive: "Total Expenditure: $X.XX"
- * - Negative:      "Total Expenditure: -$X.XX"
- * @param {Transaction[]} transactions
- */
 function renderBalance(transactions) {
   const total = transactions.reduce((sum, t) => sum + t.amount, 0);
   const absFormatted = Math.abs(total).toFixed(2);
@@ -170,189 +180,329 @@ function renderBalance(transactions) {
     : `${CURRENCY_SYMBOL}${absFormatted}`;
 
   const el = document.getElementById('balance-display');
-  if (el) {
-    el.textContent = `Total Expenditure: ${formatted}`;
-  }
+  if (el) el.textContent = `Total Expenditure: ${formatted}`;
 }
 
-/**
- * Renders (or updates) the pie chart based on the current transactions.
- * - Computes per-category totals.
- * - If all totals are zero or transactions is empty: destroys any existing
- *   chartInstance, hides the <canvas>, and shows #chart-placeholder.
- * - Otherwise: hides #chart-placeholder, shows <canvas>, then creates a new
- *   Chart.js instance or updates the existing one with the latest data.
- * @param {Transaction[]} transactions
- */
+// ============================================================
+// RENDERER — Chart
+// ============================================================
+
 function renderChart(transactions) {
-  const canvas = document.getElementById('expense-chart');
+  const canvas      = document.getElementById('expense-chart');
   const placeholder = document.getElementById('chart-placeholder');
 
-  // Compute per-category totals
-  const totals = CATEGORIES.map(cat =>
+  const totals = categories.map(cat =>
     transactions.reduce((sum, t) => t.category === cat ? sum + t.amount : sum, 0)
   );
 
   const allZero = totals.every(t => t === 0);
 
   if (allZero) {
-    // Destroy existing chart instance if present
-    if (chartInstance) {
-      chartInstance.destroy();
-      chartInstance = null;
-    }
-    // Hide canvas, show placeholder
+    if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
     canvas.classList.add('hidden');
     placeholder.textContent = 'No data to visualize.';
     placeholder.classList.remove('hidden');
     return;
   }
 
-  // Hide placeholder, show canvas
   placeholder.classList.add('hidden');
   canvas.classList.remove('hidden');
 
-  const totalsData = totals;
-
   if (chartInstance) {
-    // Update existing chart in-place
-    chartInstance.data.datasets[0].data = totalsData;
+    chartInstance.data.labels                       = categories;
+    chartInstance.data.datasets[0].data             = totals;
+    chartInstance.data.datasets[0].backgroundColor  = categories.map(c => categoryColors[c]);
     chartInstance.update();
   } else {
-    // Create a new Chart.js instance
     chartInstance = new Chart(canvas, {
       type: 'pie',
       data: {
-        labels: CATEGORIES,
+        labels: categories,
         datasets: [{
-          data: totalsData,
-          backgroundColor: CATEGORIES.map(cat => CATEGORY_COLORS[cat])
+          data:            totals,
+          backgroundColor: categories.map(c => categoryColors[c])
         }]
       },
       options: {
         responsive: true,
         plugins: {
-          legend: { position: 'bottom' }
+          legend: {
+            position: 'bottom',
+            labels: {
+              color: getComputedStyle(document.documentElement).getPropertyValue('--text').trim()
+            }
+          }
         }
       }
     });
   }
 }
 
-/**
- * Truncates a string to DISPLAY_NAME_LIMIT characters, appending '…' if needed.
- * @param {string} name
- * @returns {string}
- */
-function truncateName(name) {
-  if (name.length > DISPLAY_NAME_LIMIT) {
-    return name.slice(0, DISPLAY_NAME_LIMIT) + '…';
+// ============================================================
+// RENDERER — Category Select (dropdown in the form)
+// ============================================================
+
+function renderCategorySelect() {
+  const select = document.getElementById('category');
+  if (!select) return;
+
+  const currentValue = select.value;
+  select.innerHTML = '<option value="">Select a category</option>';
+
+  categories.forEach(cat => {
+    const opt = document.createElement('option');
+    opt.value       = cat;
+    opt.textContent = cat;
+    select.appendChild(opt);
+  });
+
+  // Restore selection if still valid
+  if (categories.includes(currentValue)) {
+    select.value = currentValue;
   }
+}
+
+// ============================================================
+// RENDERER — Custom Category Manager panel
+// ============================================================
+
+function renderCategoryManager() {
+  const listEl = document.getElementById('custom-category-list');
+  if (!listEl) return;
+
+  listEl.innerHTML = '';
+
+  categories.forEach(cat => {
+    const item = document.createElement('div');
+    item.className = 'category-item';
+
+    const swatch = document.createElement('span');
+    swatch.className   = 'category-swatch';
+    swatch.style.background = categoryColors[cat] || '#ccc';
+
+    const nameEl = document.createElement('span');
+    nameEl.className   = 'category-name';
+    nameEl.textContent = cat;
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className    = 'category-delete-btn';
+    deleteBtn.type         = 'button';
+    deleteBtn.textContent  = '×';
+    deleteBtn.dataset.cat  = cat;
+    deleteBtn.setAttribute('aria-label', `Delete category ${cat}`);
+
+    // Disable delete if it's the last remaining category
+    if (categories.length === 1) {
+      deleteBtn.disabled = true;
+      deleteBtn.title    = 'At least one category is required.';
+    }
+
+    item.appendChild(swatch);
+    item.appendChild(nameEl);
+    item.appendChild(deleteBtn);
+    listEl.appendChild(item);
+  });
+}
+
+// ============================================================
+// RENDERER — Monthly Summary
+// ============================================================
+
+/**
+ * Groups transactions by "YYYY-MM" and renders a monthly breakdown.
+ * Shows per-month total and per-category sub-totals for each month.
+ */
+function renderMonthlySummary() {
+  const container = document.getElementById('monthly-summary-content');
+  if (!container) return;
+
+  container.innerHTML = '';
+
+  if (transactions.length === 0) {
+    const empty = document.createElement('p');
+    empty.className   = 'summary-placeholder';
+    empty.textContent = 'No transactions to summarize yet.';
+    container.appendChild(empty);
+    return;
+  }
+
+  // Group by YYYY-MM
+  const groups = {};
+  transactions.forEach(t => {
+    const d   = new Date(t.createdAt);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(t);
+  });
+
+  // Sort months descending (most recent first)
+  const sortedKeys = Object.keys(groups).sort((a, b) => b.localeCompare(a));
+
+  sortedKeys.forEach(key => {
+    const [year, month] = key.split('-');
+    const monthName = new Date(Number(year), Number(month) - 1, 1)
+      .toLocaleString('default', { month: 'long', year: 'numeric' });
+
+    const monthTotal = groups[key].reduce((sum, t) => sum + t.amount, 0);
+
+    // Card for this month
+    const card = document.createElement('div');
+    card.className = 'summary-month-card';
+
+    // Month header
+    const header = document.createElement('div');
+    header.className = 'summary-month-header';
+
+    const titleEl = document.createElement('span');
+    titleEl.className   = 'summary-month-title';
+    titleEl.textContent = monthName;
+
+    const totalEl = document.createElement('span');
+    totalEl.className   = 'summary-month-total';
+    totalEl.textContent = formatAmount(monthTotal);
+
+    header.appendChild(titleEl);
+    header.appendChild(totalEl);
+    card.appendChild(header);
+
+    // Per-category breakdown
+    const breakdown = document.createElement('div');
+    breakdown.className = 'summary-breakdown';
+
+    // Collect categories present in this month
+    const catTotals = {};
+    groups[key].forEach(t => {
+      catTotals[t.category] = (catTotals[t.category] || 0) + t.amount;
+    });
+
+    // Sort by amount descending
+    Object.entries(catTotals)
+      .sort(([, a], [, b]) => b - a)
+      .forEach(([cat, total]) => {
+        const row = document.createElement('div');
+        row.className = 'summary-breakdown-row';
+
+        const swatch = document.createElement('span');
+        swatch.className = 'category-swatch summary-swatch';
+        swatch.style.background = categoryColors[cat] || '#ccc';
+
+        const catLabel = document.createElement('span');
+        catLabel.className   = 'summary-cat-label';
+        catLabel.textContent = cat;
+
+        const catAmount = document.createElement('span');
+        catAmount.className   = 'summary-cat-amount';
+        catAmount.textContent = formatAmount(total);
+
+        // Progress bar showing proportion of monthly total
+        const barWrap = document.createElement('div');
+        barWrap.className = 'summary-bar-wrap';
+
+        const bar = document.createElement('div');
+        bar.className = 'summary-bar';
+        const pct = monthTotal > 0 ? (total / monthTotal) * 100 : 0;
+        bar.style.width      = `${pct.toFixed(1)}%`;
+        bar.style.background = categoryColors[cat] || '#ccc';
+
+        barWrap.appendChild(bar);
+
+        row.appendChild(swatch);
+        row.appendChild(catLabel);
+        row.appendChild(barWrap);
+        row.appendChild(catAmount);
+        breakdown.appendChild(row);
+      });
+
+    card.appendChild(breakdown);
+    container.appendChild(card);
+  });
+}
+
+// ============================================================
+// RENDERER — Transaction List
+// ============================================================
+
+function truncateName(name) {
+  if (name.length > DISPLAY_NAME_LIMIT) return name.slice(0, DISPLAY_NAME_LIMIT) + '…';
   return name;
 }
 
-/**
- * Formats a numeric amount as a currency string.
- * Positive / zero → "$X.XX", negative → "-$X.XX"
- * @param {number} amount
- * @returns {string}
- */
+const rupiahFormatter = new Intl.NumberFormat('id-ID', {
+  style: 'currency',
+  currency: 'IDR'
+});
+
 function formatAmount(amount) {
-  if (amount < 0) {
-    return '-' + CURRENCY_SYMBOL + Math.abs(amount).toFixed(2);
-  }
-  return CURRENCY_SYMBOL + amount.toFixed(2);
+  return rupiahFormatter.format(amount);
 }
 
-/**
- * Renders the transaction list into #transaction-list.
- * - If transactions is empty, shows a placeholder message.
- * - Otherwise, renders one row per transaction with name, amount, category,
- *   and a delete button (data-id = transaction.id).
- * Fully replaces #transaction-list contents on every call.
- * @param {Transaction[]} transactions
- */
 function renderTransactionList(transactions) {
   const listEl = document.getElementById('transaction-list');
   if (!listEl) return;
 
-  // Clear existing content
   listEl.innerHTML = '';
 
   if (transactions.length === 0) {
     const placeholder = document.createElement('p');
-    placeholder.className = 'list-placeholder';
+    placeholder.className   = 'list-placeholder';
     placeholder.textContent = 'No expenses added yet.';
     listEl.appendChild(placeholder);
     return;
   }
 
-  transactions.forEach(function (transaction) {
-    // Outer row
+  transactions.forEach(transaction => {
     const item = document.createElement('div');
     item.className = 'transaction-item';
 
-    // Info block: name + category
     const info = document.createElement('div');
     info.className = 'transaction-info';
 
     const nameEl = document.createElement('span');
-    nameEl.className = 'transaction-name';
+    nameEl.className   = 'transaction-name';
     nameEl.textContent = truncateName(transaction.name);
 
     const categoryEl = document.createElement('span');
-    categoryEl.className = 'transaction-category';
+    categoryEl.className   = 'transaction-category';
     categoryEl.textContent = transaction.category;
 
     info.appendChild(nameEl);
     info.appendChild(categoryEl);
 
-    // Amount
     const amountEl = document.createElement('span');
-    amountEl.className = 'transaction-amount';
+    amountEl.className   = 'transaction-amount';
     amountEl.textContent = formatAmount(transaction.amount);
 
-    // Delete button
     const deleteBtn = document.createElement('button');
-    deleteBtn.className = 'delete-btn';
-    deleteBtn.type = 'button';
-    deleteBtn.textContent = 'Delete';
-    deleteBtn.dataset.id = transaction.id;
+    deleteBtn.className      = 'delete-btn';
+    deleteBtn.type           = 'button';
+    deleteBtn.textContent    = 'Delete';
+    deleteBtn.dataset.id     = transaction.id;
 
     item.appendChild(info);
     item.appendChild(amountEl);
     item.appendChild(deleteBtn);
-
     listEl.appendChild(item);
   });
 }
 
-/**
- * Orchestrates a full UI re-render by calling all three renderer functions.
- * @param {Transaction[]} transactions
- */
+// ============================================================
+// RENDERER — Full re-render
+// ============================================================
+
 function renderAll(transactions) {
   renderTransactionList(transactions);
   renderBalance(transactions);
   renderChart(transactions);
+  renderMonthlySummary();
 }
 
 // ============================================================
-// EVENT HANDLERS
+// EVENT HANDLERS — Expense Form
 // ============================================================
 
-/**
- * Handles the expense form's submit event.
- * - Validates all fields and shows inline errors; stops if any are invalid.
- * - Builds a new Transaction, attempts to persist it, and on success updates
- *   in-memory state, re-renders all UI, and resets the form.
- * - On StorageError, displays an error banner and preserves the form values.
- * @param {Event} event
- */
 function handleFormSubmit(event) {
   event.preventDefault();
 
-  // --- Read field values ---
   const nameInput     = document.getElementById('item-name');
   const amountInput   = document.getElementById('amount');
   const categoryInput = document.getElementById('category');
@@ -361,12 +511,10 @@ function handleFormSubmit(event) {
   const amountValue   = amountInput   ? amountInput.value   : '';
   const categoryValue = categoryInput ? categoryInput.value : '';
 
-  // --- Validate ---
   const nameError     = validateName(nameValue);
   const amountError   = validateAmount(amountValue);
   const categoryError = validateCategory(categoryValue);
 
-  // Display (or clear) inline error messages
   const nameErrorEl     = document.getElementById('item-name-error');
   const amountErrorEl   = document.getElementById('amount-error');
   const categoryErrorEl = document.getElementById('category-error');
@@ -375,12 +523,8 @@ function handleFormSubmit(event) {
   if (amountErrorEl)   amountErrorEl.textContent   = amountError   || '';
   if (categoryErrorEl) categoryErrorEl.textContent = categoryError || '';
 
-  // If any field is invalid, stop here
-  if (nameError || amountError || categoryError) {
-    return;
-  }
+  if (nameError || amountError || categoryError) return;
 
-  // --- Build new transaction ---
   const newTransaction = {
     id:        crypto.randomUUID(),
     name:      nameValue.trim(),
@@ -389,7 +533,6 @@ function handleFormSubmit(event) {
     createdAt: Date.now()
   };
 
-  // --- Persist ---
   const storageErrorEl = document.getElementById('storage-error');
 
   try {
@@ -400,44 +543,34 @@ function handleFormSubmit(event) {
         storageErrorEl.textContent = err.message;
         storageErrorEl.classList.remove('hidden');
       }
-      // Do NOT mutate in-memory state; preserve the form values
       return;
     }
-    throw err; // re-throw unexpected errors
+    throw err;
   }
 
-  // --- Success: update state, re-render, reset form ---
   transactions.push(newTransaction);
   renderAll(transactions);
 
-  // Reset form fields
   if (nameInput)     nameInput.value     = '';
   if (amountInput)   amountInput.value   = '';
   if (categoryInput) categoryInput.value = '';
 
-  // Clear all error spans
   if (nameErrorEl)     nameErrorEl.textContent     = '';
   if (amountErrorEl)   amountErrorEl.textContent   = '';
   if (categoryErrorEl) categoryErrorEl.textContent = '';
 
-  // Hide storage error banner
   if (storageErrorEl) {
     storageErrorEl.textContent = '';
     storageErrorEl.classList.add('hidden');
   }
 }
 
-/**
- * Handles click events on #transaction-list via event delegation.
- * Only acts when the clicked element is a delete button (has data-id attribute).
- * - On StorageError: re-renders the list unchanged and shows an error in the list area.
- * - On success: removes the transaction from in-memory state and re-renders all.
- * @param {MouseEvent} event
- */
+// ============================================================
+// EVENT HANDLERS — Transaction Delete
+// ============================================================
+
 function handleDelete(event) {
   const btn = event.target;
-
-  // Only handle clicks on delete buttons that carry a data-id
   if (!btn.dataset.id) return;
 
   const id = btn.dataset.id;
@@ -446,14 +579,11 @@ function handleDelete(event) {
     removeFromStorage(id, transactions);
   } catch (err) {
     if (err instanceof StorageError) {
-      // Re-render the list unchanged so the transaction is still visible
       renderTransactionList(transactions);
-
-      // Show a delete-error message inside the list area
       const listEl = document.getElementById('transaction-list');
       if (listEl) {
         const errorEl = document.createElement('p');
-        errorEl.className = 'storage-error delete-error';
+        errorEl.className   = 'storage-error delete-error';
         errorEl.textContent = 'Could not delete transaction: storage is unavailable or full.';
         listEl.prepend(errorEl);
       }
@@ -462,8 +592,71 @@ function handleDelete(event) {
     throw err;
   }
 
-  // Success — remove from in-memory state and re-render
   transactions = transactions.filter(t => t.id !== id);
+  renderAll(transactions);
+}
+
+// ============================================================
+// EVENT HANDLERS — Custom Category Manager
+// ============================================================
+
+/**
+ * Handles adding a new custom category from the input field.
+ */
+function handleAddCategory() {
+  const input    = document.getElementById('new-category-input');
+  const errorEl  = document.getElementById('new-category-error');
+  if (!input) return;
+
+  const raw   = input.value.trim();
+  let   error = null;
+
+  if (!raw) {
+    error = 'Category name cannot be empty.';
+  } else if (raw.length > 50) {
+    error = 'Category name must be 50 characters or fewer.';
+  } else if (categories.map(c => c.toLowerCase()).includes(raw.toLowerCase())) {
+    error = 'That category already exists.';
+  }
+
+  if (errorEl) errorEl.textContent = error || '';
+  if (error) return;
+
+  // Add the new category
+  categories.push(raw);
+  rebuildCategoryColors();
+  saveCategoriesToStorage();
+
+  // Sync UI
+  renderCategoryManager();
+  renderCategorySelect();
+  renderChart(transactions);     // chart labels/colors may expand
+
+  input.value = '';
+}
+
+/**
+ * Handles deleting a category via the × button in the category manager.
+ * Transactions that used this category are kept but their category label
+ * becomes "(Deleted)" to preserve history.
+ */
+function handleDeleteCategory(event) {
+  const btn = event.target.closest('.category-delete-btn');
+  if (!btn) return;
+
+  const cat = btn.dataset.cat;
+  if (!cat || !categories.includes(cat)) return;
+
+  if (categories.length === 1) return; // guard: keep at least one
+
+  // Remove category
+  categories = categories.filter(c => c !== cat);
+  rebuildCategoryColors();
+  saveCategoriesToStorage();
+
+  // Re-render everything (transactions keep the old category label)
+  renderCategoryManager();
+  renderCategorySelect();
   renderAll(transactions);
 }
 
@@ -471,58 +664,72 @@ function handleDelete(event) {
 // INIT
 // ============================================================
 
-/**
- * Bootstraps the application on DOMContentLoaded.
- * - Loads persisted transactions from localStorage.
- * - If the stored data was corrupt/invalid (loadError === true), displays
- *   error messages in #transaction-list and #chart-placeholder instead of
- *   the normal empty-state placeholders.
- * - Paints the initial UI state via renderAll().
- * - Wires up the form submit and list click event handlers.
- */
 function init() {
+  applyTheme(localStorage.getItem(THEME_KEY) || 'light');
+
+  // Load categories first (needed for validation & rendering)
+  categories = loadCategoriesFromStorage();
+  rebuildCategoryColors();
+
+  // Load transactions
   transactions = loadFromStorage();
 
   if (loadError) {
-    // Show load error in the transaction list area
     const listEl = document.getElementById('transaction-list');
     if (listEl) {
       listEl.innerHTML = '';
       const errorEl = document.createElement('p');
-      errorEl.className = 'storage-error load-error';
+      errorEl.className   = 'storage-error load-error';
       errorEl.textContent = 'Transactions could not be loaded. Storage data is unavailable or corrupted.';
       listEl.appendChild(errorEl);
     }
 
-    // Show load error in the chart placeholder area
     const chartPlaceholder = document.getElementById('chart-placeholder');
     if (chartPlaceholder) {
       chartPlaceholder.textContent = 'Chart data could not be loaded.';
       chartPlaceholder.classList.remove('hidden');
     }
 
-    // Hide the canvas since we have no valid data
     const canvas = document.getElementById('expense-chart');
-    if (canvas) {
-      canvas.classList.add('hidden');
-    }
+    if (canvas) canvas.classList.add('hidden');
 
-    // Still render balance (will show $0.00) and skip list/chart via early returns
     renderBalance(transactions);
   } else {
     renderAll(transactions);
   }
 
-  // Attach event handlers
+  // Populate category dropdown with loaded categories
+  renderCategorySelect();
+
+  // Populate the category manager panel
+  renderCategoryManager();
+
+  // Attach form submit handler
   const form = document.getElementById('expense-form');
-  if (form) {
-    form.addEventListener('submit', handleFormSubmit);
+  if (form) form.addEventListener('submit', handleFormSubmit);
+
+  const themeToggle = document.getElementById('theme-toggle');
+  if (themeToggle) themeToggle.addEventListener('click', handleThemeToggle);
+
+  // Attach transaction delete handler
+  const listEl = document.getElementById('transaction-list');
+  if (listEl) listEl.addEventListener('click', handleDelete);
+
+  // Attach "Add Category" button handler
+  const addCatBtn = document.getElementById('add-category-btn');
+  if (addCatBtn) addCatBtn.addEventListener('click', handleAddCategory);
+
+  // Allow Enter key in the new-category input
+  const newCatInput = document.getElementById('new-category-input');
+  if (newCatInput) {
+    newCatInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); handleAddCategory(); }
+    });
   }
 
-  const listEl = document.getElementById('transaction-list');
-  if (listEl) {
-    listEl.addEventListener('click', handleDelete);
-  }
+  // Attach category delete handler (delegated)
+  const catListEl = document.getElementById('custom-category-list');
+  if (catListEl) catListEl.addEventListener('click', handleDeleteCategory);
 }
 
 document.addEventListener('DOMContentLoaded', init);

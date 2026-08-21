@@ -9,7 +9,12 @@
 <body>
 
   <header>
-    <h1>Expense &amp; Budget Visualizer</h1>
+    <div class="header-content">
+      <h1>Expense &amp; Budget Visualizer</h1>
+      <button id="theme-toggle" type="button" aria-label="Switch to dark mode" aria-pressed="false">
+        <span aria-hidden="true">◐</span> Dark mode
+      </button>
+    </div>
     <div id="balance-display">Total Expenditure: $0.00</div>
   </header>
 
@@ -39,7 +44,7 @@
             type="number"
             step="0.01"
             min="0.01"
-            placeholder="e.g. 12.50"
+            placeholder="e.g. 12,500"
           />
           <span class="field-error" id="amount-error" role="alert" aria-live="polite"></span>
         </div>
@@ -72,12 +77,42 @@
 
   </main>
 
+  <!-- Custom Category Manager -->
+  <section class="category-manager-section">
+    <h2>Manage Categories</h2>
+    <div class="category-manager-inner">
+      <div class="add-category-row">
+        <input
+          id="new-category-input"
+          type="text"
+          maxlength="50"
+          placeholder="New category name…"
+          autocomplete="off"
+          aria-label="New category name"
+        />
+        <button id="add-category-btn" type="button">+ Add</button>
+      </div>
+      <span class="field-error" id="new-category-error" role="alert" aria-live="polite"></span>
+      <div id="custom-category-list" aria-label="Category list">
+        <!-- populated by renderCategoryManager() -->
+      </div>
+    </div>
+  </section>
+
   <!-- Chart Section -->
   <section class="chart-section">
     <h2>Spending by Category</h2>
     <div id="chart-container">
       <canvas id="expense-chart" aria-label="Expense pie chart" role="img"></canvas>
       <div id="chart-placeholder" class="hidden">No data to visualize.</div>
+    </div>
+  </section>
+
+  <!-- Monthly Summary Section -->
+  <section class="monthly-summary-section">
+    <h2>Monthly Summary</h2>
+    <div id="monthly-summary-content" aria-label="Monthly expense summary">
+      <!-- populated by renderMonthlySummary() -->
     </div>
   </section>
 
