@@ -5,7 +5,7 @@
 const STORAGE_KEY          = 'expense_transactions';
 const CATEGORIES_KEY       = 'expense_categories';
 const THEME_KEY            = 'expense_theme';
-const CURRENCY_SYMBOL      = 'Rp';
+const CURRENCY_SYMBOL      = 'Rp ';
 const MAX_AMOUNT           = 999999999.99;
 const MAX_NAME_LENGTH      = 100;
 const DISPLAY_NAME_LIMIT   = 50;
