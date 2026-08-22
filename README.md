@@ -1,6 +1,6 @@
 # CodingCamp-17August26-reubenezera
 
-The mini project I built using Kiro for this RevoU Coding Camp is a budget & expense tracker. Features include:
+The mini project I built using Kiro for this RevoU Coding Camp is a budget & expense visualizer. Features include:
 - A transaction list
 - A category manager
 - A visualization char
