@@ -174,13 +174,8 @@ function removeFromStorage(id, transactions) {
 
 function renderBalance(transactions) {
   const total = transactions.reduce((sum, t) => sum + t.amount, 0);
-  const absFormatted = Math.abs(total).toFixed(2);
-  const formatted = total < 0
-    ? `-${CURRENCY_SYMBOL}${absFormatted}`
-    : `${CURRENCY_SYMBOL}${absFormatted}`;
-
   const el = document.getElementById('balance-display');
-  if (el) el.textContent = `Total Expenditure: ${formatted}`;
+  if (el) el.textContent = `Total Expenditure: ${formatAmount(total)}`;
 }
 
 // ============================================================
